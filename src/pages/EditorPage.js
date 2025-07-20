@@ -36,7 +36,6 @@ const EditorPage = () => {
                 username: location.state?.username,
             });
 
-            // Listening for joined event
             socketRef.current.on(
                 ACTIONS.JOINED,
                 ({ clients, username, socketId }) => {
@@ -52,7 +51,6 @@ const EditorPage = () => {
                 }
             );
 
-            // Listening for disconnected
             socketRef.current.on(
                 ACTIONS.DISCONNECTED,
                 ({ socketId, username }) => {
@@ -102,6 +100,18 @@ const EditorPage = () => {
                             alt="logo"
                         />
                     </div>
+                    {/* Moved Chat Room button here */}
+                    <button
+                        className="btn joinBtn"
+                        onClick={() =>
+                            reactNavigator(`/chat/${roomId}`, {
+                                state: { username: location.state?.username },
+                            })
+                        }
+                        style={{ marginTop: '1rem', marginBottom: '1rem' }}
+                    >
+                        Chat Room
+                    </button>
                     <h3>Connected</h3>
                     <div className="clientsList">
                         {clients.map((client) => (

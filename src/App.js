@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Home from './pages/Home';
 import EditorPage from './pages/EditorPage';
+import ChatPage from './pages/ChatPage';
 
 function App() {
     return (
@@ -26,6 +27,7 @@ function App() {
                         path="/editor/:roomId"
                         element={<EditorPage />}
                     ></Route>
+                    <Route path="/chat/:roomId" element={<ChatPage />}></Route>
                 </Routes>
             </BrowserRouter>
         </>
