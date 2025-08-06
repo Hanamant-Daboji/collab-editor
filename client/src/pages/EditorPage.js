@@ -84,6 +84,27 @@ const EditorPage = () => {
     function leaveRoom() {
         reactNavigator('/');
     }
+    function downloadCode() {
+        if (!codeRef.current) {
+            toast.error('No code to download!');
+            return;
+        }
+
+        // Create a Blob with the code
+        const blob = new Blob([codeRef.current], { type: 'text/plain' });
+
+        // Create a temporary download link
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `room-${roomId}.txt`; // File name
+
+        // Auto-click the link to trigger download
+        link.click();
+
+        // Cleanup
+        URL.revokeObjectURL(link.href);
+    }
+
 
     if (!location.state) {
         return <Navigate to="/" />;
@@ -125,6 +146,9 @@ const EditorPage = () => {
                 <button className="btn copyBtn" onClick={copyRoomId}>
                     Copy ROOM ID
                 </button>
+                <button className="btn saveBtn" onClick={downloadCode}>
+                    Download Code
+                </button>
                 <button className="btn leaveBtn" onClick={leaveRoom}>
                     Leave
                 </button>
@@ -140,6 +164,8 @@ const EditorPage = () => {
             </div>
         </div>
     );
+
+
 };
 
 export default EditorPage;

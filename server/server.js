@@ -1,30 +1,41 @@
 const express = require('express');
 const http = require('http');
-const path = require('path');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const { Server } = require('socket.io');
-const ACTIONS = require('./src/Actions');
+const ACTIONS = require('./utils/Actions');
 const ChatMessage = require('./models/ChatMessage');
+const CodeRoom = require('./models/CodeRoom');
+
+require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
 
-// Serve React build
-app.use(express.static('build'));
-app.use((req, res, next) => {
-    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+// ✅ Enable CORS for REST API
+app.use(
+    cors({
+        origin: process.env.CLIENT_URL || '*', // frontend URL
+        methods: ['GET', 'POST'],
+        credentials: true,
+    })
+);
+
+// ✅ Socket.IO with CORS
+const io = new Server(server, {
+    cors: {
+        origin: process.env.CLIENT_URL || '*', // frontend URL
+        methods: ['GET', 'POST'],
+    },
 });
 
 // ✅ MongoDB connection
-mongoose.connect('mongodb://localhost:27017/chat-sync', {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
+mongoose
+    .connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB connected'))
     .catch((err) => console.error('❌ MongoDB connection error:', err));
 
-// Health route (optional)
+// Health check endpoint
 app.get('/api/health', async (req, res) => {
     try {
         await mongoose.connection.db.admin().ping();
@@ -47,12 +58,21 @@ function getAllConnectedClients(roomId) {
 io.on('connection', (socket) => {
     console.log('📡 Socket connected:', socket.id);
 
-    // 🔁 Join room
     socket.on(ACTIONS.JOIN, async ({ roomId, username }) => {
         userSocketMap[socket.id] = username;
         socket.join(roomId);
 
-        // 🧠 Fetch chat history from MongoDB
+        // Send last saved code
+        try {
+            const existingRoom = await CodeRoom.findOne({ roomId });
+            if (existingRoom) {
+                socket.emit(ACTIONS.CODE_CHANGE, { code: existingRoom.content });
+            }
+        } catch (err) {
+            console.error('❌ Error fetching code from DB:', err);
+        }
+
+        // Send chat history
         try {
             const history = await ChatMessage.find({ roomId })
                 .sort({ timestamp: 1 })
@@ -62,6 +82,7 @@ io.on('connection', (socket) => {
             console.error('❌ Error fetching chat history:', err);
         }
 
+        // Notify all in room
         const clients = getAllConnectedClients(roomId);
         clients.forEach(({ socketId }) => {
             io.to(socketId).emit(ACTIONS.JOINED, {
@@ -72,19 +93,26 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 💻 Code change broadcast
-    socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code }) => {
+    // Broadcast and save code
+    socket.on(ACTIONS.CODE_CHANGE, async ({ roomId, code }) => {
         socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code });
+        try {
+            await CodeRoom.findOneAndUpdate(
+                { roomId },
+                { content: code, updatedAt: Date.now() },
+                { upsert: true }
+            );
+        } catch (err) {
+            console.error('❌ Error saving code to DB:', err);
+        }
     });
 
-    // 🔁 Sync code to new user
     socket.on(ACTIONS.SYNC_CODE, ({ socketId, code }) => {
         io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code });
     });
 
-    // 💬 Handle incoming chat message
     socket.on('chat-message', async ({ roomId, username, message }) => {
-        console.log(`📩 ${username} sent message in room ${roomId}: ${message}`);
+        console.log(`📩 ${username} sent: ${message}`);
         try {
             const newMsg = new ChatMessage({ roomId, username, message });
             await newMsg.save();
@@ -98,8 +126,6 @@ io.on('connection', (socket) => {
         }
     });
 
-
-    // ❌ Handle disconnect
     socket.on('disconnecting', () => {
         const rooms = [...socket.rooms];
         rooms.forEach((roomId) => {
@@ -112,5 +138,5 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 5500;
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
